@@ -1,0 +1,52 @@
+# batch_config.yaml — TradingAgents Batch Runner Configuration
+#
+# Usage:
+#   python batch_run.py batch_config.yaml
+#   python batch_run.py batch_config.yaml --only 300308.SZ,688256.SH
+#   python batch_run.py batch_config.yaml --skip 300750.SZ
+
+# ─── Tickers ──────────────────────────────────────────────────────────────
+# List of stock tickers to analyze. A-share format: 600xxx.SH / 300xxx.SZ / 688xxx.SH
+tickers:
+  - 300308.SZ    # 中际旭创 — AI光模块龙头
+  - 300750.SZ    # 宁德时代 — 动力电池
+  - 600600.SH    # 青岛啤酒 — 消费品
+  # - 688256.SH    # 寒武纪   — AI芯片
+  # - 002463.SZ  # 沪电股份 — PCB
+  # - 301308.SZ  # 江波龙   — 存储
+
+# ─── Analysis Settings ─────────────────────────────────────────────────────
+# Analysis date (YYYY-MM-DD). Omit or set to null for today.
+analysis_date: "2026-09-12"
+
+# Analysts to run (subset of: market, social, news, fundamentals)
+# Order doesn't matter — internal execution order is always market → social → news → fundamentals
+analysts: [market, social, news, fundamentals]
+
+# Research depth: number of debate + risk rounds
+# 1 = fast (one bull-bear debate, one risk round) — ~3-5 min per ticker
+# 2 = thorough (two rounds each) — ~6-10 min per ticker
+research_depth: 1
+
+# Output language for analyst reports and final decision
+# Internal agent debate stays in English for reasoning quality
+output_language: English    # or "Chinese" / "中文"
+
+# ─── LLM Settings ──────────────────────────────────────────────────────────
+# All optional — omit / set to null to use .env / DEFAULT_CONFIG values
+# MiniMax CN (China endpoint): uses MINIMAX_CN_API_KEY from .env
+llm_provider: minimax-cn
+quick_think_llm: MiniMax-M3           # 1M ctx, native multimodal, latest flagship
+deep_think_llm: MiniMax-M3            # same for both; use M2.7-highspeed for speed
+# backend_url: null                   # auto-resolved to https://api.minimaxi.com/v1
+# temperature: null
+
+# ─── Batch Control ─────────────────────────────────────────────────────────
+# Directory for results (per-ticker subdirs created automatically)
+results_dir: ./batch_results
+
+# Stop the entire batch if one ticker fails
+stop_on_error: false
+
+# Delay (seconds) between tickers to avoid API rate-limiting
+delay_between_tickers: 5

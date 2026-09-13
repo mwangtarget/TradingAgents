@@ -1,3 +1,4 @@
+import io
 import logging
 import os
 import time
@@ -83,7 +84,63 @@ def _normalize_dates(dates) -> pd.Series:
     ``utc=True`` — which would shift non-US (positive-offset) markets to the
     previous day. Keeping each bar's own local date avoids both.
     """
-    return pd.to_datetime(pd.Series(dates).map(_local_midnight))
+    values = pd.Series(dates)
+    if values.empty:
+        return pd.Series(dtype="datetime64[ns]")
+
+    # Tushare serializes dates as YYYYMMDD integers; when passed directly to
+    # pd.Timestamp they are treated as nanoseconds since the Unix epoch, which
+    # produces bogus 1970 dates. Convert integer-like values to strings first.
+    def _coerce_one(value):
+        if pd.isna(value):
+            return pd.NaT
+        if isinstance(value, (int, float)) and not pd.isna(value):
+            value = str(int(value))
+        if isinstance(value, str):
+            compact = value.strip()
+            if compact.isdigit() and len(compact) == 8:
+                return pd.to_datetime(compact, format="%Y%m%d")
+        return _local_midnight(value)
+
+    return pd.to_datetime(values.map(_coerce_one), errors="coerce")
+
+
+def _canonicalize_ohlcv_columns(data: pd.DataFrame) -> pd.DataFrame:
+    """Map vendor-specific OHLCV column names to the project schema.
+
+    Some vendors use ``trade_date``/``open``/``close`` while others return the
+    Yahoo-style ``Date``/``Open``/``Close`` names. Normalize both before any
+    downstream access so the stockstats pipeline never hits a raw ``KeyError``.
+    """
+    if data is None or data.empty:
+        return data
+
+    rename_map = {
+        "trade_date": "Date",
+        "date": "Date",
+        "datetime": "Date",
+        "ts_code": "Ticker",
+        "symbol": "Ticker",
+        "open": "Open",
+        "high": "High",
+        "low": "Low",
+        "close": "Close",
+        "volume": "Volume",
+        "vol": "Volume",
+        "amount": "Amount",
+    }
+
+    normalized = data.copy()
+    normalized.columns = [str(col).strip() for col in normalized.columns]
+    normalized = normalized.rename(columns=lambda c: rename_map.get(str(c).strip().lower(), c))
+
+    if "Date" not in normalized.columns:
+        for candidate in ("index", "Datetime", "date"):
+            if candidate in normalized.columns:
+                normalized = normalized.rename(columns={candidate: "Date"})
+                break
+
+    return normalized
 
 
 def _clean_dataframe(data: pd.DataFrame) -> pd.DataFrame:
@@ -91,9 +148,13 @@ def _clean_dataframe(data: pd.DataFrame) -> pd.DataFrame:
     coerce prices to numeric (NaN where invalid). Dropping incomplete rows and
     filling gaps is left to ``_fill_price_gaps`` so the caller can first inspect
     the latest in-range bar (#1201)."""
+    data = _canonicalize_ohlcv_columns(data)
+    if "Date" not in data.columns:
+        raise NoMarketDataError("UNKNOWN", "UNKNOWN", "market data lacked a usable Date column")
     data = _ensure_date_column(data)
     data["Date"] = _normalize_dates(data["Date"])
     data = data.dropna(subset=["Date"])
+    data = data.sort_values("Date").reset_index(drop=True)
 
     price_cols = [c for c in ["Open", "High", "Low", "Close", "Volume"] if c in data.columns]
     data[price_cols] = data[price_cols].apply(pd.to_numeric, errors="coerce")
@@ -228,19 +289,26 @@ def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
             data = cached
 
     if data is None:
-        downloaded = yf_retry(lambda: yf.download(
-            canonical,
-            start=start_str,
-            end=end_str,
-            multi_level_index=False,
-            progress=False,
-            auto_adjust=True,
-        ))
-        downloaded = _ensure_date_column(downloaded.reset_index())
+        from .interface import route_to_vendor
+
+        raw = route_to_vendor("get_stock_data", canonical, start_str, end_str)
+        if not isinstance(raw, str):
+            raise NoMarketDataError(symbol, canonical, "configured market data vendor returned no CSV")
+
+        downloaded = pd.read_csv(io.StringIO(raw), comment="#")
+        downloaded = _canonicalize_ohlcv_columns(downloaded)
+        if "Date" not in downloaded.columns:
+            raise NoMarketDataError(
+                symbol,
+                canonical,
+                "configured market data vendor returned a payload without a usable Date column",
+            )
+
+        downloaded = downloaded.dropna(subset=["Date"], how="all")
         # Only cache real data — never persist an empty frame.
         if downloaded.empty or "Close" not in downloaded.columns:
             raise NoMarketDataError(
-                symbol, canonical, "Yahoo Finance returned no rows"
+                symbol, canonical, "Configured market data vendor returned no usable OHLCV rows"
             )
         downloaded.to_csv(data_file, index=False, encoding="utf-8")
         data = downloaded

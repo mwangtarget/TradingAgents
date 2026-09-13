@@ -96,6 +96,25 @@ class VendorRoutingTests(unittest.TestCase):
             result = interface.route_to_vendor("get_stock_data", "AAPL", "2026-01-01", "2026-01-10")
         self.assertEqual(result, "AV_DATA")
 
+    def test_tushare_is_registered_for_market_and_fundamentals(self):
+        self.assertIn("tushare", interface.VENDOR_LIST)
+        self.assertIn("tushare", interface.VENDOR_METHODS["get_stock_data"])
+        self.assertIn("tushare", interface.VENDOR_METHODS["get_fundamentals"])
+
+        set_config({"data_vendors": {"core_stock_apis": "tushare"}})
+        with mock.patch.dict(
+            interface.VENDOR_METHODS,
+            {
+                "get_stock_data": {"tushare": _returns("TS_DATA")},
+                "get_fundamentals": {"tushare": _returns("TS_FUND")},
+            },
+            clear=False,
+        ):
+            stock = interface.route_to_vendor("get_stock_data", "600519.SH", "2026-01-01", "2026-01-10")
+            fundamentals = interface.route_to_vendor("get_fundamentals", "600519.SH", "2026-01-31")
+        self.assertEqual(stock, "TS_DATA")
+        self.assertEqual(fundamentals, "TS_FUND")
+
     def _route_method(self, method, vendors):
         return mock.patch.dict(interface.VENDOR_METHODS, {method: vendors}, clear=False)
 
