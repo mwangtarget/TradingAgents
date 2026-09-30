@@ -29,6 +29,7 @@ from .tushare import (
     get_cashflow as get_tushare_cashflow,
     get_fundamentals as get_tushare_fundamentals,
     get_income_statement as get_tushare_income_statement,
+    get_indicators as get_tushare_indicators,
     get_stock as get_tushare_stock,
 )
 from .y_finance import (
@@ -118,6 +119,7 @@ VENDOR_METHODS = {
     "get_indicators": {
         "alpha_vantage": get_alpha_vantage_indicator,
         "yfinance": get_stock_stats_indicators_window,
+        "tushare": get_tushare_indicators,
     },
     # fundamental_data
     "get_fundamentals": {

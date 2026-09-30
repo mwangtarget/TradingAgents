@@ -138,7 +138,7 @@ DEFAULT_CONFIG = _apply_env_overrides({
     # e.g. "yfinance,alpha_vantage". "default" uses all available vendors.
     "data_vendors": {
         "core_stock_apis": "tushare",       # Options: alpha_vantage, yfinance, tushare
-        "technical_indicators": "tushare",  # Options: alpha_vantage, yfinance
+        "technical_indicators": "tushare",  # Options: alpha_vantage, yfinance, tushare
         "fundamental_data": "tushare",      # Options: alpha_vantage, yfinance, tushare
         "news_data": "eastmoney,yfinance",       # Options: eastmoney (A-shares), yfinance, alpha_vantage
         "macro_data": "fred,nbsc",             # Options: fred (needs FRED_API_KEY), nbsc (China NBS, no key needed)

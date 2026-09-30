@@ -109,6 +109,27 @@ def resolve_instrument_identity(ticker: str) -> dict:
     """
     from tradingagents.dataflows.symbol_utils import normalize_symbol
 
+    # For A-share symbols (.SS/.SZ/.BJ), use tushare stock_basic to avoid
+    # yfinance rate-limiting.  Fall back to yfinance for everything else.
+    if ticker.endswith((".SS", ".SZ", ".BJ")):
+        try:
+            from tradingagents.dataflows.tushare import _require_api
+            api = _require_api()
+            basic = api.stock_basic(
+                ts_code=ticker,
+                fields="ts_code,name,area,industry,exchange,list_date",
+            )
+            if basic is not None and not basic.empty:
+                row = basic.iloc[0]
+                return {
+                    "company_name": str(row.get("name", "")),
+                    "industry": str(row.get("industry", "")),
+                    "exchange": str(row.get("exchange", "")),
+                }
+        except Exception as exc:
+            logger.debug("tushare stock_basic failed for %s: %s", ticker, exc)
+            # fall through to yfinance
+
     try:
         info = yf.Ticker(normalize_symbol(ticker)).info or {}
     except Exception as exc:  # noqa: BLE001 — fail open, never block the run
