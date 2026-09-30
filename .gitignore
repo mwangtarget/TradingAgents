@@ -221,3 +221,9 @@ __marimo__/
 # Enterprise env file (secrets) and generated run reports
 .env.enterprise
 reports/
+
+# Batch pipeline runtime artifacts (consolidated under batch_pipeline/)
+batch_pipeline/trading_results.db
+batch_pipeline/*.db
+batch_pipeline/logs/
+batch_pipeline/stock_lists/*.log
